@@ -71,7 +71,7 @@ def Synchronize_Video(images, beatTime, filename, frameRateArray):
 
     video = cv2.VideoWriter(filename, fourcc, frameRate, (max_width, max_height))
     
-    selected_images = random.sample(images, 58) #Allows us to select 50 different images
+    selected_images = random.sample(images, 50) #Allows us to select 50 different images
     
     for img in selected_images:
         y = (max_height - img.shape[0]) // 2  # Center the height
