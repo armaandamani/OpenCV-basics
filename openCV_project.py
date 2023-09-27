@@ -71,7 +71,7 @@ def Synchronize_Video(images, beatTime, filename, frameRateArray):
 
     video = cv2.VideoWriter(filename, fourcc, frameRate, (max_width, max_height))
     
-    selected_images = random.sample(images, 50) #Allows us to select 50 different images
+    selected_images = random.sample(images, 58) #Allows us to select 50 different images
     
     for img in selected_images:
         y = (max_height - img.shape[0]) // 2  # Center the height
@@ -131,18 +131,3 @@ if os.path.exists(videoFilePath):
 #Calls the two functions
 frameRateArray = Synchronize_Video(newImages, beatTime, videoFilePath, frameRateArray)
 Play_Video(videoFilePath, audioFile, frameRateArray)
-
-
-
-'''
-Checklist:
-
-Other CV2 Functions: cv2.videoWriter
-Chapter 5.1 (Drawing): np.zeros()
-Chapter 6.3/6.4 (Masking & Bitwise Operations): cv2.bitwise_and
-Chapter 6.6 (Color Spaces): cv2.cvtcolor()
-Chapter 8.2 (Gaussian Blurring): cv2.gaussianBlur()
-Chapter 10.3 (Canny Edge): cv2.canny()
-Chapter 11.1 (Contours): cv2.findContours() & cv2.drawContours()
-
-'''
