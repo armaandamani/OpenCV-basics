@@ -20,7 +20,7 @@ args = vars(ap.parse_args())
 audioFile = args["audio"]
 (amp, sr) = librosa.load(audioFile, sr = 24000)
 
-#Caluclates where the beats occur in the track, but in a weird format...
+#Caluclates the frames where the beats occur in the track
 (tempo, beatFrame) = librosa.beat.beat_track(y = amp, sr = sr)
 
 #Creates an array of timestaps at which each of the beats occur
@@ -28,6 +28,9 @@ beatTime = librosa.frames_to_time(beatFrame, sr = sr)
 
 #initializes the frame rate array -- differences between values in beatTime
 frameRateArray = np.diff(beatTime)
+
+frameRate = np.mean(np.diff(beatTime))
+frameRateArray = np.append(frameRateArray, frameRate) #Appends one more value so that frameratearray doesn't return an index error when we call later
 
 def loadImages(directory):
     images = []
@@ -51,19 +54,17 @@ images, contours_list = loadImages(args["directory"])
 
 newImages = []
 
-for img, cnts in zip(images, contours_list): #Creates a black canvas with white outlining to then mask the original image over and create a cool-looking colored copy
+for img, cnts in zip(images, contours_list): #Creates a black canvas with white outlining to then mask the original image over and create a colored copy
     mask = np.zeros_like(img)
     for cnt in cnts:
-        cv2.drawContours(mask, [cnt], -1, (255, 255, 255))
+        cv2.drawContours(mask, [cnt], 0, (255, 255, 255))
     mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
     new = cv2.bitwise_and(img, img, mask = mask)
     newImages.append(new)
 
 
 
-def Synchronize_Video(images, beatTime, filename, frameRateArray):
-    frameRate = np.mean(np.diff(beatTime))
-    frameRateArray = np.append(frameRateArray, frameRate) #Appends one more value so that frameratearray doesn't return an index error
+def Create_Video(images, filename):
     fourcc = cv2.VideoWriter_fourcc(*'mp4v') #Writes the video
     
     max_height = max(img.shape[0] for img in images) #Sets values for video height and width to the biggest images from the Images list
@@ -71,7 +72,7 @@ def Synchronize_Video(images, beatTime, filename, frameRateArray):
 
     video = cv2.VideoWriter(filename, fourcc, frameRate, (max_width, max_height))
     
-    selected_images = random.sample(images, 50) #Allows us to select 50 different images
+    selected_images = random.sample(images, 50) #Allows us to select 50 different images / I chose to play only 50 out of the 57 images provided, because I wanted the video to end at a certain point in the song
     
     for img in selected_images:
         y = (max_height - img.shape[0]) // 2  # Center the height
@@ -85,14 +86,13 @@ def Synchronize_Video(images, beatTime, filename, frameRateArray):
     #cv2.destroyAllWindows
     video.release()
     print(f"Video is saved at {filename}")
+    print("This is a program that takes a minimalistic approach to a music video... I used one of my songs as the input to create a synced music video with processed portrait shots of singular items")
     
     if not os.path.exists(filename):
         print(f"Failed to create the video at {filename}")
 
-    return frameRateArray #For the play function
 
-
-def Play_Video(filename, audiofile, frameRateArray):
+def Play_SyncedVideo(filename, audiofile, beatTime, frameRateArray):
     cap = cv2.VideoCapture(filename) #Identifies video
     
     if not cap.isOpened():
@@ -105,7 +105,7 @@ def Play_Video(filename, audiofile, frameRateArray):
     
     while cap.isOpened():
         for i in range(len(frameRateArray)):
-            ret, frame = cap.read() #Reads video and returns a value of True or False for ret, as well as the frames of the video
+            ret, frame = cap.read() #Reads video and returns a value of True or False for ret, as well as each frame of the video
             if not ret:
                 break
             cv2.imshow('Video', frame)
@@ -129,5 +129,5 @@ if os.path.exists(videoFilePath):
     os.remove(videoFilePath)
 
 #Calls the two functions
-frameRateArray = Synchronize_Video(newImages, beatTime, videoFilePath, frameRateArray)
-Play_Video(videoFilePath, audioFile, frameRateArray)
+Create_Video(newImages, videoFilePath)
+Play_SyncedVideo(videoFilePath, audioFile, beatTime, frameRateArray)
