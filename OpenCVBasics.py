@@ -1,133 +1,135 @@
-import librosa
-import cv2
 import argparse
-import numpy as np
 import os
 import random
 import time
+import numpy as np
+import cv2
+import librosa
 from pygame import mixer as pgm
-import own
+import own  # Assuming 'own' is a custom module for contour detection
 
-ap = argparse.ArgumentParser()
+def parse_arguments():
+    """Parse command-line arguments for audio, image directory, and save path."""
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-a", "--audio", required=True, help="Path to audio file input")
+    parser.add_argument("-d", "--directory", required=True, help="Path to directory with images for music video")
+    parser.add_argument("-s", "--save", required=True, help="Path where you want to save the video; folder will be created if it doesn't exist")
+    return parser.parse_args()
 
-ap.add_argument("-a", "--audio", required = True, help = "Path to audio file input")
-ap.add_argument("-d", "--directory", required = True, help = "Path to directory with images for music video")
-ap.add_argument("-s", "--save", required = True, help = "Path where you want to save the video... Folder will be created if it doesn't exist")
+def load_audio(audio_path):
+    """Load an audio file and return amplitude and sample rate."""
+    return librosa.load(audio_path, sr=24000)
 
-args = vars(ap.parse_args())
+def detect_beats(amplitude, sample_rate):
+    """Detect beats in audio and calculate beat times and frame rates."""
+    tempo, beat_frames = librosa.beat.beat_track(y=amplitude, sr=sample_rate)
+    beat_times = librosa.frames_to_time(beat_frames, sr=sample_rate)
+    frame_rate_array = np.diff(beat_times)
+    frame_rate = np.mean(frame_rate_array)
+    frame_rate_array = np.append(frame_rate_array, frame_rate)  # Match array length
+    return beat_times, frame_rate_array, frame_rate
 
-#Loads Audio file and returns values for amplitude and sample rate
-audioFile = args["audio"]
-(amp, sr) = librosa.load(audioFile, sr = 24000)
-
-#Caluclates the frames where the beats occur in the track
-(tempo, beatFrame) = librosa.beat.beat_track(y = amp, sr = sr)
-
-#Creates an array of timestaps at which each of the beats occur
-beatTime = librosa.frames_to_time(beatFrame, sr = sr)
-
-#initializes the frame rate array -- differences between values in beatTime
-frameRateArray = np.diff(beatTime)
-
-frameRate = np.mean(np.diff(beatTime))
-frameRateArray = np.append(frameRateArray, frameRate) #Appends one more value so that frameratearray doesn't return an index error when we call later
-
-def loadImages(directory):
+def load_and_process_images(directory):
+    """Load images from a directory and process them to extract contours."""
     images = []
-    contours = []
-    for filename in os.listdir(directory): #Loads and processes all of the images
+    contours_list = []
+    for filename in os.listdir(directory):
         if filename.endswith(('.png', '.jpg', '.jpeg')):
             image_path = os.path.join(directory, filename)
             image = cv2.imread(image_path)
-            r = 480 / image.shape[1] #image.shape[0] = height, image.shape[1] = width
-            dim = (480, int(image.shape[0] * r)) #[width, height]
+            if image is None:
+                print(f"Warning: Could not load image {image_path}")
+                continue
+            r = 480 / image.shape[1]
+            dim = (480, int(image.shape[0] * r))
             resized = cv2.resize(image, dim)
             gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
             blurred = cv2.GaussianBlur(gray, (3, 3), 0)
             edged = cv2.Canny(blurred, 45, 90)
-            cnts = own.contours(cv2.findContours(edged.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE))
+            contours = own.contours(cv2.findContours(edged.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE))
             images.append(resized)
-            contours.append(cnts)
-    return images, contours #Returns a list of the images and their derived contours from the specified directory
+            contours_list.append(contours)
+    return images, contours_list
 
-images, contours_list = loadImages(args["directory"])
+def create_masked_images(images, contours_list):
+    """Create masked images with white outlines from original images and contours."""
+    processed_images = []
+    for image, contours in zip(images, contours_list):
+        mask = np.zeros_like(image)
+        for contour in contours:
+            cv2.drawContours(mask, [contour], 0, (255, 255, 255), thickness=cv2.FILLED)
+        mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
+        masked_image = cv2.bitwise_and(image, image, mask=mask)
+        processed_images.append(masked_image)
+    return processed_images
 
-newImages = []
-
-for img, cnts in zip(images, contours_list): #Creates a black canvas with white outlining to then mask the original image over and create a colored copy
-    mask = np.zeros_like(img)
-    for cnt in cnts:
-        cv2.drawContours(mask, [cnt], 0, (255, 255, 255))
-    mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
-    new = cv2.bitwise_and(img, img, mask = mask)
-    newImages.append(new)
-
-
-
-def Create_Video(images, filename):
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v') #Writes the video
-    
-    max_height = max(img.shape[0] for img in images) #Sets values for video height and width to the biggest images from the Images list
+def create_video(images, output_path, frame_rate):
+    """Generate a video from a list of images and save it to the specified path."""
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    max_height = max(img.shape[0] for img in images)
     max_width = max(img.shape[1] for img in images)
-
-    video = cv2.VideoWriter(filename, fourcc, frameRate, (max_width, max_height))
+    video = cv2.VideoWriter(output_path, fourcc, frame_rate, (max_width, max_height))
     
-    selected_images = random.sample(images, 50) #Allows us to select 50 different images / I chose to play only 50 out of the 57 images provided, because I wanted the video to end at a certain point in the song
+    selected_images = random.sample(images, min(50, len(images)))  # Select up to 50 images
     
-    for img in selected_images:
-        y = (max_height - img.shape[0]) // 2  # Center the height
-        x = (max_width - img.shape[1]) // 2   # Center the width
-        
-        canvas = np.ones((max_height, max_width, 3), dtype='uint8') #Clear canvas to paste image atop
-        canvas[y: y + img.shape[0], x: x + img.shape[1]] = img
-
+    for image in selected_images:
+        y_offset = (max_height - image.shape[0]) // 2
+        x_offset = (max_width - image.shape[1]) // 2
+        canvas = np.ones((max_height, max_width, 3), dtype='uint8') * 255  # White background
+        canvas[y_offset:y_offset + image.shape[0], x_offset:x_offset + image.shape[1]] = image
         video.write(canvas)
-
-    #cv2.destroyAllWindows
+    
     video.release()
-    print(f"Video is saved at {filename}")
-    print("This is a program that takes a minimalistic approach to a music video... I used one of my songs as the input to create a synced music video with processed portrait shots of singular items")
-    
-    if not os.path.exists(filename):
-        print(f"Failed to create the video at {filename}")
+    print(f"Video saved at {output_path}")
+    if not os.path.exists(output_path):
+        print(f"Failed to create video at {output_path}")
 
-
-def Play_SyncedVideo(filename, audiofile, beatTime, frameRateArray):
-    cap = cv2.VideoCapture(filename) #Identifies video
-    
+def play_synced_video(video_path, audio_path, beat_times, frame_rate_array):
+    """Play a video synchronized with audio beats."""
+    cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
-        print(f"Error: Cannot open video file {filename}")
+        print(f"Error: Cannot open video file {video_path}")
         return
     
     pgm.init()
-    pgm.music.load(audiofile) #Loads and plays audio
+    pgm.music.load(audio_path)
     pgm.music.play()
     
-    while cap.isOpened():
-        for i in range(len(frameRateArray)):
-            ret, frame = cap.read() #Reads video and returns a value of True or False for ret, as well as each frame of the video
-            if not ret:
-                break
-            cv2.imshow('Video', frame)
+    for i in range(len(frame_rate_array)):
+        ret, frame = cap.read()
+        if not ret:
+            break
+        cv2.imshow('Video', frame)
+        wait_time = int(1000 * frame_rate_array[i])
+        cv2.waitKey(wait_time)
+    
+    cap.release()
+    pgm.music.stop()
+    cv2.destroyAllWindows()
 
-            wait_time = int(1000 * frameRateArray[i])
-        
-            cv2.waitKey(wait_time)
+def main():
+    """Main function to orchestrate audio-video synchronization and video creation."""
+    args = parse_arguments()
+    
+    # Load and process audio
+    amplitude, sample_rate = load_audio(args.audio)
+    beat_times, frame_rate_array, frame_rate = detect_beats(amplitude, sample_rate)
+    
+    # Load and process images
+    images, contours_list = load_and_process_images(args.directory)
+    processed_images = create_masked_images(images, contours_list)
+    
+    # Set up save directory and video path
+    save_dir = args.save
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+    video_file_path = os.path.join(os.path.abspath(save_dir), "open_cv_project.mp4")
+    if os.path.exists(video_file_path):
+        os.remove(video_file_path)
+    
+    # Create and play the video
+    create_video(processed_images, video_file_path, frame_rate)
+    play_synced_video(video_file_path, args.audio, beat_times, frame_rate_array)
 
-        cap.release() #Stops everything once video is done
-        pgm.music.stop()
-        cv2.destroyAllWindows()
-        
-
-#Establishing the proper file/folder paths to ensure easy use of the program
-if not os.path.exists(args["save"]):
-    os.makedirs(args["save"]) 
-
-absolute = os.path.abspath(args["save"])
-videoFilePath = os.path.join(absolute, "openCVProject.mp4")
-if os.path.exists(videoFilePath):
-    os.remove(videoFilePath)
-
-#Calls the two functions
-Create_Video(newImages, videoFilePath)
-Play_SyncedVideo(videoFilePath, audioFile, beatTime, frameRateArray)
+if __name__ == "__main__":
+    main()
