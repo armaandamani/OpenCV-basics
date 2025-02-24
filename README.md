@@ -1,6 +1,6 @@
 # OpenCV-Project
 
-This project was intended to help me familiarize myself with the functions of Python's openCV & Librosa libraries.
+This project was intended to help me familiarize myself with the functions of Python's openCV library.
 
 
 Checklist:
