@@ -2,8 +2,6 @@
 
 This project was intended to help me familiarize myself with the functions of Python's openCV & Librosa libraries.
 
-Download Files: https://drive.google.com/drive/folders/1QFeJUKQmwyxYdBtLDr5Y63MW0Iqahjvv?usp=drive_link
-
 
 Checklist:
 
