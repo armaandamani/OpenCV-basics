@@ -1,6 +1,6 @@
-# OpenCV-Project
+# OpenCV-basics
 
-This project was intended to help me familiarize myself with the functions of Python's openCV library.
+All Python source code is now located in the `src/` directory.
 
 
 Checklist:
